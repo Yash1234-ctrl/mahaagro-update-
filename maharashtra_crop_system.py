@@ -162,6 +162,7 @@ def load_model():
         logger.error(f"Failed to load model: {e}")
         raise
 
+
 # Chat helper used to live here but was refactored into the
 # separate module `openrouter_chat.py` to centralize API logic.
 # Keeping this comment in case anyone searches for the old
@@ -2705,8 +2706,13 @@ class MaharashtraAgriculturalSystem:
     def save_analysis_data(self, data):
         """Save analysis data to MongoDB database"""
         # Check database connection
-        if not hasattr(self, "mongo_db") or not self.mongo_db:
-            st.error("Database connection not initialized")
+        if (
+            not hasattr(self, "mongo_db")
+            or not self.mongo_db
+            or not getattr(self.mongo_db, "connected", False)
+        ):
+            # do not spam error if user never asked to save
+            st.warning("Database connection unavailable; analysis will not be saved.")
             return False
 
         # Validate input data
@@ -3328,6 +3334,12 @@ def main():
         # Auth DB
         if "auth_db" not in st.session_state:
             st.session_state.auth_db = MongoFarmerAuth()
+            # notify user if mongodb connection was not established
+            if not getattr(st.session_state.auth_db, "connected", False):
+                st.warning(
+                    "⚠️ Unable to connect to MongoDB. The system is running in offline mode; "
+                    "authentication and data persistence features will be limited."
+                )
         if "authenticated" not in st.session_state:
             st.session_state.authenticated = False
 
@@ -3569,6 +3581,14 @@ def main():
 
     # Sidebar - Farm Information
     with st.sidebar:
+        # Warn user if MongoDB is unavailable
+        if "auth_db" in st.session_state and not getattr(
+            st.session_state.auth_db, "connected", False
+        ):
+            st.error(
+                "🚫 MongoDB connection unavailable. "
+                "Some features (login/registration, history) are disabled."
+            )
         st.markdown("🏡 Smart Farm Dashboard")
         # Optional logout control (does not alter main UI)
         if st.session_state.authenticated:
