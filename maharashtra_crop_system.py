@@ -162,7 +162,6 @@ def load_model():
         logger.error(f"Failed to load model: {e}")
         raise
 
-
 # Chat helper used to live here but was refactored into the
 # separate module `openrouter_chat.py` to centralize API logic.
 # Keeping this comment in case anyone searches for the old
@@ -3336,24 +3335,6 @@ def main():
         st.error(f"System initialization error: {str(e)}")
         st.stop()
 
-    # Helper utilities used throughout the UI - define early so all blocks can use them
-    def _format_disease_name(name: str) -> str:
-        if not name:
-            return "Unknown"
-        try:
-            s = str(name)
-        except Exception:
-            return "Unknown"
-        s = s.replace("_", " ").replace("-", " ").strip()
-        return s.title()
-
-    def _normalize_disease_key(raw: str) -> str:
-        if not raw:
-            return ""
-        s = str(raw).replace("-", " ").replace("_", " ").strip()
-        parts = [p.capitalize() for p in s.split() if p]
-        return "_".join(parts)
-
     # Enhanced Authentication gate with modern UI
     if not st.session_state.authenticated:
         # Apply custom styling for auth pages
@@ -3756,62 +3737,12 @@ def main():
 
             st.success("✅ Complete analysis finished! Check all tabs for results.")
 
-            # Small helper to pick display color based on disease / confidence
-            def _disease_display_color(disease_name: str, confidence_val: float) -> str:
-                dn = (disease_name or "").lower()
-                try:
-                    conf = float(confidence_val)
-                except Exception:
-                    conf = 0.0
-
-                if "healthy" in dn:
-                    return "#2E7D32"  # green
-                # high severity
-                if conf >= 80:
-                    return "#D32F2F"  # red
-                if conf >= 60:
-                    return "#FF9800"  # orange
-                return "#1565C0"  # blue for uncertain/low
-
-            # small helpers for formatting disease names and keys
-            def _format_disease_name(name: str) -> str:
-                if not name:
-                    return "Unknown"
-                try:
-                    s = str(name)
-                except Exception:
-                    return "Unknown"
-                s = s.replace("_", " ").replace("-", " ").strip()
-                return s.title()
-
-            def _normalize_disease_key(raw: str) -> str:
-                if not raw:
-                    return ""
-                s = str(raw).replace("-", " ").replace("_", " ").strip()
-                parts = [p.capitalize() for p in s.split() if p]
-                return "_".join(parts)
-
-            # Show quick summary (with colored disease badge)
+            # Show quick summary
             st.markdown("#### Quick Summary:")
             if "crop" in analyses:
-                crop = analyses["crop"]
-                disp_raw = crop.get("disease", "Unknown")
-                disp = _format_disease_name(disp_raw)
-                conf = crop.get("confidence", 0.0)
-                desc = crop.get("disease_description", "")
-                color = _disease_display_color(disp, conf)
-
-                st.markdown(
-                    f"""
-                    <div style="display:flex;align-items:center;gap:1rem;">
-                      <div style="background:{color};padding:0.5rem 0.9rem;border-radius:8px;color:white;font-weight:700;font-size:1rem;">{disp}</div>
-                      <div style="font-size:0.95rem;">Confidence: <strong>{conf:.1f}%</strong></div>
-                    </div>
-                    {f'<div style="margin-top:6px;color:#6b7280;font-size:0.9rem;">{desc}</div>' if desc else ''}
-                    """,
-                    unsafe_allow_html=True,
+                st.write(
+                    f"🌿 Crop: {analyses['crop']['disease']} ({analyses['crop']['confidence']:.1f}% confidence)"
                 )
-
             st.write(
                 f"🧪 Soil Health: {analyses['soil']['score']}/100 ({analyses['soil']['status']})"
             )
@@ -3863,9 +3794,8 @@ def main():
             and st.session_state.crop_analysis is not None
         ):
             result = st.session_state.crop_analysis
-            confidence = result.get("confidence", 0.0)
-            disease_raw = result.get("raw_disease", result.get("disease", "Unknown"))
-            disease = _format_disease_name(disease_raw)
+            confidence = result["confidence"]
+            disease = result["disease"]
 
             if "healthy" in disease.lower():
                 st.markdown(
@@ -4204,85 +4134,30 @@ def main():
                 unsafe_allow_html=True,
             )
 
-            # Enhanced metrics display with colored cards
-            def _local_disease_color(disease_name, confidence_val):
-                dn = (disease_name or "").lower()
-                try:
-                    conf = float(confidence_val)
-                except Exception:
-                    conf = 0.0
-                if "healthy" in dn:
-                    return "#2E7D32"
-                if conf >= 80:
-                    return "#D32F2F"
-                if conf >= 60:
-                    return "#FF9800"
-                return "#1565C0"
-
+            # Enhanced metrics display with visual indicators
             col1, col2, col3, col4 = st.columns(4)
 
             with col1:
-                color = _local_disease_color(disease, result.get("confidence", 0))
-                st.markdown(
-                    f"""
-                    <div style="background:{color};padding:1rem;border-radius:12px;text-align:center;color:white;">
-                        <div style="font-size:13px;font-weight:600;opacity:0.95;">Disease Detected</div>
-                        <div style="font-size:18px;font-weight:700;margin-top:6px;">{disease}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                st.metric("Disease Detected", result["disease"])
 
             with col2:
-                st.markdown(
-                    f"""
-                    <div style="background:#0f1724;padding:1rem;border-radius:12px;text-align:center;color:white;">
-                        <div style="font-size:13px;font-weight:600;opacity:0.9;">Confidence Level</div>
-                        <div style="font-size:18px;font-weight:700;margin-top:6px;">{result.get('confidence',0):.1f}%</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                st.metric("Confidence Level", f"{result['confidence']:.1f}%")
 
             with col3:
                 severity = (
                     "LOW"
-                    if result.get("confidence", 0) < 60
-                    else "MEDIUM" if result.get("confidence", 0) < 80 else "HIGH"
+                    if result["confidence"] < 60
+                    else "MEDIUM" if result["confidence"] < 80 else "HIGH"
                 )
-                sev_color = (
-                    "#4CAF50"
-                    if severity == "LOW"
-                    else "#FF9800" if severity == "MEDIUM" else "#D32F2F"
-                )
-                st.markdown(
-                    f"""
-                    <div style="background:{sev_color};padding:1rem;border-radius:12px;text-align:center;color:white;">
-                        <div style="font-size:13px;font-weight:600;opacity:0.95;">Severity Level</div>
-                        <div style="font-size:18px;font-weight:700;margin-top:6px;">{severity}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                st.metric("Severity Level", severity)
 
             with col4:
                 health_status = (
-                    "Healthy" if "healthy" in disease.lower() else "Needs Attention"
+                    "Healthy"
+                    if result["disease"].lower() == "healthy"
+                    else "Needs Attention"
                 )
-                hs_color = (
-                    "#2E7D32"
-                    if health_status == "Healthy"
-                    else ("#D32F2F" if severity == "HIGH" else "#FF9800")
-                )
-                st.markdown(
-                    f"""
-                    <div style="background:{hs_color};padding:1rem;border-radius:12px;text-align:center;color:white;">
-                        <div style="font-size:13px;font-weight:600;opacity:0.95;">Crop Status</div>
-                        <div style="font-size:18px;font-weight:700;margin-top:6px;">{health_status}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                st.metric("Crop Status", health_status)
 
             st.markdown("---")
 
@@ -4296,25 +4171,21 @@ def main():
                     pred_df = pd.DataFrame(
                         result["all_predictions"], columns=["Disease", "Probability"]
                     )
-                    # Format disease names for display
-                    pred_df["Disease"] = pred_df["Disease"].apply(
-                        lambda x: _format_disease_name(x)
-                    )
 
                     # Enhanced bar chart with healthy status highlighting
                     pred_fig = go.Figure()
 
                     # Color code bars - green for healthy, blue for diseases
                     colors = [
-                        "#4CAF50" if "healthy" in d.lower() else "#3498DB"
-                        for d in pred_df["Disease"]
+                        "#4CAF50" if "healthy" in disease.lower() else "#3498DB"
+                        for disease in pred_df["Disease"]
                     ]
 
                     pred_fig.add_trace(
                         go.Bar(
                             x=pred_df["Disease"],
                             y=pred_df["Probability"],
-                            marker_color=colors,
+                            marker_color="rgba(255, 80, 80, 0.9)",  # Bright red bars
                             marker_line_color="rgba(255, 255, 255, 0.8)",
                             marker_line_width=1.5,
                             text=pred_df["Probability"].round(1),
@@ -4389,7 +4260,7 @@ def main():
                 # Additional analysis insights
                 st.markdown("#### 🔬 Analysis Insights")
 
-                if "disease" in result and "healthy" in disease.lower():
+                if "disease" in result and "healthy" in result["disease"].lower():
                     insights = [
                         "✅ No significant disease patterns detected",
                         "🌱 Plant appears to be in good health",
@@ -4398,8 +4269,8 @@ def main():
                     ]
                 else:
                     insights = [
-                        f"🔍 {disease} pattern identified",
-                        f"📊 Detection confidence: {result.get('confidence',0):.1f}%",
+                        f"🔍 {result['disease']} pattern identified",
+                        f"📊 Detection confidence: {result['confidence']:.1f}%",
                         "⚡ Early intervention recommended",
                         "📋 Follow treatment plan below",
                     ]
@@ -4428,7 +4299,7 @@ def main():
                 unsafe_allow_html=True,
             )
 
-            if disease.lower() == "healthy":
+            if result["disease"].lower() == "healthy":
                 st.markdown(
                     """
                     <div style="
@@ -4570,7 +4441,7 @@ def main():
                 }
 
                 # Display treatment protocol
-                disease_key = _normalize_disease_key(disease_raw)
+                disease_key = result["disease"].replace(" ", "_")
                 protocol = treatment_protocols.get(disease_key, {})
 
                 if protocol:
@@ -4673,7 +4544,7 @@ def main():
                 )
 
             # Action plan summary
-            if disease.lower() != "healthy":
+            if result["disease"].lower() != "healthy":
                 st.markdown("---")
                 st.markdown("### 📋 Action Plan Summary")
 
