@@ -13,3 +13,5 @@ python-dotenv
 bcrypt
 google-generativeai
 openai>=1.0.0
+pymongo
+dnspython
